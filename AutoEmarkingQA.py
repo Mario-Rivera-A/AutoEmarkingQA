@@ -1,21 +1,44 @@
 from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support.select import Select
+from selenium.common.exceptions import TimeoutException, ElementClickInterceptedException, NoSuchElementException, StaleElementReferenceException
 
 import time
 
-from env import USER, PASS, URL, COURSE, DIRECTORIO
+import os
 
-driver = webdriver.Chrome()
+import requests
+
+import random
+
+from env import USER, PASS, URL, COURSE, DIRECTORIO, DIRECTORIO_DESCARGAS
+
+# driver = webdriver.Chrome()
+
+##########################
+chrome_options = webdriver.ChromeOptions()
+
+# Configurar las preferencias para la descarga automática
+prefs = {
+    "download.default_directory": DIRECTORIO_DESCARGAS,  # Ruta de descarga
+    "download.prompt_for_download": False,        # Desactivar el diálogo de descarga
+    "download.directory_upgrade": True,           # Permitir que Selenium actualice el directorio de descargas
+    "safebrowsing.enabled": False,                  # Habilitar la descarga de archivos inseguros (opcional)
+    "safebrowsing.disable_download_protection": True,  # Deshabilitar la protección de descargas (opcional)
+    "plugins.always_open_pdf_externally": False     # Forzar la descarga de PDFs en lugar de abrirlos en el navegador
+}
+
+# Aplicar las preferencias
+chrome_options.add_experimental_option("prefs", prefs)
+
+# Inicializar el driver con las opciones
+driver = webdriver.Chrome(options=chrome_options)
+##########################
+
 wait = WebDriverWait(driver, 10)
-
-rubrica = [["p1	0	1	2	3"], ["	0 puntos	1 puntos	2 puntos	3 puntos"],
-           ["p2	0	1	2	3"], ["	0 puntos	1 puntos	2 puntos	3 puntos"]]
-
-rubrica2 = f"p1	0	1	2	3 "+"\n	0 puntos	1 puntos	2 puntos	3 puntos"+"\np2	0	1	2	3"+"\n	0 puntos	1 puntos	2 puntos	3 puntos"
-
 
 #Login
 def login():
@@ -35,12 +58,29 @@ def login_autenticator():
 
 login()
 
-
-
+def wait_for_zip_file(directory, existing_files, timeout=300):
+    """
+    Esperamos a que un archivo .zip con el nombre especificado aparezca en el directorio.
+    """
+    
+    start_time = time.time()
+    while True:
+        current_files = [f for f in os.listdir(directory) if f.endswith('.zip')]
+        new_files = set(current_files) - set(existing_files)
+        if new_files:
+            new_file = new_files.pop()
+            file_path = os.path.join(directory, new_file)
+            print(f'Nuevo archivo .zip encontrado: {file_path}')
+            return file_path
+        
+        elapsed_time = time.time() - start_time
+        if elapsed_time > timeout:
+            print("No se encontró un nuevo archivo .zip en el tiempo esperado.")
+            return None
+        time.sleep(5)
 
 # Seleccionar el modo de edición si este está desactivado
 time.sleep(1)
-wait = WebDriverWait(driver, 10)
 
 element = wait.until(EC.element_to_be_clickable(
     (By.XPATH, '//*[@id="usernavigation"]/li/form/div')))
@@ -62,7 +102,8 @@ driver.refresh()
 wait = WebDriverWait(driver, 10)
 
 # Abrimos el selector de actividades
-actividades_btn = wait.until(EC.element_to_be_clickable((By.XPATH, '//button[@data-action="open-chooser"]')))
+actividades_btn = wait.until(EC.visibility_of_element_located((By.XPATH, '//button[@data-action="open-chooser"]')))
+time.sleep(1)
 actividades_btn.click() 
 
 # Hacemos click en la actividad requerida
@@ -101,16 +142,167 @@ wait.until(EC.element_to_be_clickable((By.XPATH, '//button[@class="fp-upload-btn
 # Guardamos y mostramos
 wait.until(EC.element_to_be_clickable((By.ID, 'id_submitbutton'))).click()
 
+# ####################
+# # Atajo
+# driver.get('http://localhost/mod/emarking/view.php?id=4468')
+# ####################
 
-# Importamos pauta de evaluación
+# "Importamos" pauta de evaluación
 wait.until(EC.element_to_be_clickable((By.XPATH, '//table/tbody/tr/td[2]'))).click()
 
-# Ingresamos la rúbrica
-if wait.until(EC.presence_of_element_located((By.XPATH, '//textarea[@name="comments"]'))):
-    print('Textarea encontrado')
-    wait.until(EC.presence_of_element_located((By.XPATH, '//textarea[@name="comments"]'))).send_keys(rubrica2)
+rubrica_text = """Criterio 1	Nivel 1.1	Nivel 1.2	Nivel 1.3
+	0 puntos	1.5 puntos	2 puntos
+Criterio 2	Nivel 2.1	Nivel 2.2	
+	0 puntos	5 puntos	
+Criterio 3	Nivel 3.1	Nivel 3.2	Nivel 3.3
+	0 puntos	1 punto	3 puntos
+
+"""
+
+textarea = wait.until(EC.element_to_be_clickable((By.XPATH, '//textarea[@name="comments"]')))
+driver.execute_script("""
+    arguments[0].value = arguments[1];
+""", textarea, rubrica_text)
+
+# Enviamos, confirmamos la rúbrica y luego continuamos
+wait.until(EC.element_to_be_clickable((By.XPATH, '//input[@type="submit"]'))).click()
+wait.until(EC.element_to_be_clickable((By.XPATH, '//input[@type="submit"]'))).click()
+wait.until(EC.visibility_of_element_located((By.XPATH, '//button[@type="submit"]'))).click()
+
+# Vamos a la pestaña imprimir y digitalizar para guardar la prueba
+wait.until(EC.element_to_be_clickable((By.XPATH, '//div[@role = "main"]/ul/li[1]'))).click()
+
+# ##################
+# # Atajo
+# driver.get('http://localhost/mod/emarking/print/exam.php?id=4470')
+# ##################
+
+before_download = set(os.listdir(DIRECTORIO_DESCARGAS))
+
+original_window = driver.current_window_handle
+assert len(driver.window_handles) == 1
+
+# Esperar hasta que la prueba sea procesada
+while True:
+    try:
+        wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button[class$="downloadExam"]')))
+    except:
+        print("Prueba procesando...")
+        driver.refresh()
+    else:
+        print("Prueba procesada")
+        break
+    
+wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button[class$="downloadExam"]'))).click()
+wait.until(EC.number_of_windows_to_be(2))
+
+new_window = [window for window in driver.window_handles if window != original_window][0]
+driver.switch_to.window(new_window)
+
+# Obtenemos el url de la nueva pestaña
+file_url = driver.current_url
+print(f'URL de la nueva pestaña: {file_url}')
+
+# Descargamos la prueba usando requests
+session = requests.Session()
+for cookie in driver.get_cookies():
+    session.cookies.set(cookie['name'], cookie['value'])
+    
+# Realizamos la solicitud GET para descargar el archivo
+response = session.get(file_url, verify=False)
+
+# Guardamos el archivo
+nombre_archivo = os.path.basename(file_url)
+
+ruta_archivo = os.path.join(DIRECTORIO_DESCARGAS, nombre_archivo)
+
+with open(ruta_archivo, 'wb') as file:
+    file.write(response.content)
+print(f"Archivo descargado en: {ruta_archivo}")
+
+driver.close()
+driver.switch_to.window(original_window)
+
+# Hay que esperar a procesar las pruebas antes de continuar
+print('Procesa el archivo descargado ')
+existing_zip_files = [f for f in os.listdir(DIRECTORIO_DESCARGAS) if f.endswith('.zip')]
+zip_file_path = wait_for_zip_file(DIRECTORIO_DESCARGAS, existing_zip_files)
+
+while not zip_file_path:
+    print('Procesa el archivo descargado ')
+    zip_file_path = wait_for_zip_file(DIRECTORIO_DESCARGAS, existing_zip_files)
+
+# Una vez ya procesadas las respuestas, hay que subirlas
+wait.until(EC.element_to_be_clickable((By.XPATH, '//div[@role = "main"]/ul[2]/li[2]'))).click()
+
+# Subimos el archivo .zip que encontramos
+wait.until(EC.element_to_be_clickable((By.XPATH, '//input[@type="button"]'))).click()
+wait.until(EC.element_to_be_clickable((By.XPATH, '//input[@type="file"]'))).send_keys(zip_file_path)
+wait.until(EC.element_to_be_clickable((By.XPATH, '//button[starts-with(@class,"fp-upload-btn")]'))).click()
+wait.until(EC.element_to_be_clickable((By.XPATH, '//span[@data-fieldtype="submit"]/input[@name="submitbutton"]'))).click()
+
+# Esperamos a que la prueba esté procesada
+while True:
+    status = wait.until(EC.visibility_of_element_located((By.XPATH, '//table[@class = "generaltable"]/tbody/tr/td[5]')))
+    if status.text == 'Processed' or  status.text == 'Procesada':
+        break
+    else:
+        print('Procesando respuestas...')
+        time.sleep(20)
+        driver.refresh()
+
+# Vamos a corrección en pantalla para empezar a revisar las pruebas
+wait.until(EC.element_to_be_clickable((By.XPATH, '//div[@role = "main"]/ul/li[2]'))).click()
 
 
+
+
+def correct_button():
+    
+    try:
+        # Buscamos los elementos tr
+        trs = wait.until(EC.presence_of_all_elements_located((By.XPATH, '//table[@id="emarking-main"]/tbody/tr[not(@class="emptyrow")]')))
+        print(f'Cantidad de pruebas a corregir: {len(trs)}')
+        
+        # Obtener el atributo 'href' de cada elemento 'tr' en la lista 'trs'
+        hrefs = [tr.find_element(By.XPATH,'td[5]/div/a[1]').get_attribute('href') for tr in trs]
+        print(f'hrefs: {hrefs}')
+        
+        for i, href in enumerate(hrefs):
+            try:
+                
+                driver.get(href)
+                print(f'Corrigiendo prueba {i+1} de {len(trs)}')
+                
+                # Ya sabemos la cantidad de criterios y de niveles por criterio que hay en la rúbrica
+                niveles = {1:random.randint(2,4), 2:random.randint(2,3), 3:random.randint(2,4)}
+            
+                for criterio in range(1,4):
+                    # Para corregir, podemos hacer un click en la página de la prueba para que se despliegue el modal de corrección 
+                    wait.until(EC.visibility_of_element_located((By.XPATH, '//div/table/tbody/tr[1]/td/div/div/canvas'))).click()
+                    print(f'Corrigiendo criterio {criterio}')
+                    
+                    # Seleccionamos un nivel al azar
+                    wait.until(EC.visibility_of_element_located((By.XPATH, f'//tbody/tr[2]/td/div/div/table/tbody/tr[{criterio}]/td/div/div[{niveles[criterio]}]/div/div'))).click()
+                    
+                    # Guardamos el nivel
+                    wait.until(EC.element_to_be_clickable((By.XPATH, '//tr[4]/td/table/tbody/tr/td[1]/button'))).click()
+                time.sleep(2)
+                if i == len(trs) - 1:
+                    print('Última prueba corregida')
+                
+                
+
+            except:
+                print(f'No se pudo corregir la prueba {href}')                
+                time.sleep(4)
+                continue
+                
+    except Exception as e:
+        print(f"Ocurrió un error: {e}")
+        
+        
+correct_button()    
 
 
 
