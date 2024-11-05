@@ -168,15 +168,15 @@ def emarking_settings():
         
 
 def rubric():
-    ####################
-    # Atajo
-    driver.get('http://localhost/mod/emarking/view.php?id=4516')
-    ####################
-# try:
-    # "Importamos" pauta de evaluación
-    wait.until(EC.element_to_be_clickable((By.XPATH, '//table/tbody/tr/td[2]'))).click()
+    # ####################
+    # # Atajo
+    # driver.get('http://localhost/mod/emarking/view.php?id=4524')
+    # ####################
+    try:
+        # "Importamos" pauta de evaluación
+        wait.until(EC.element_to_be_clickable((By.XPATH, '//table/tbody/tr/td[2]'))).click()
 
-    rubric_text = """Criterio 1	Nivel 1.1	Nivel 1.2	Nivel 1.3
+        rubric_text = """Criterio 1	Nivel 1.1	Nivel 1.2	Nivel 1.3
 	0 puntos	1.5 puntos	2 puntos
 Criterio 2	Nivel 2.1	Nivel 2.2	
 	0 puntos	5 puntos	
@@ -184,36 +184,36 @@ Criterio 3	Nivel 3.1	Nivel 3.2	Nivel 3.3
 	0 puntos	1 punto	3 puntos
 
     """
-    driver.refresh()
-    textarea = wait.until(EC.visibility_of_element_located((By.XPATH, '//textarea[@name="comments"]')))
-    textarea.clear()
-    time.sleep(1)
-            
-    for char in rubric_text:
-        driver.execute_script("""
-            arguments[0].value += arguments[1];
-            arguments[0].dispatchEvent(new Event('input', { bubbles: true }));
-        """, textarea, char)
+        driver.refresh()
+        textarea = wait.until(EC.visibility_of_element_located((By.XPATH, '//textarea[@name="comments"]')))
+        textarea.clear()
+        time.sleep(1)
+                
+        for char in rubric_text:
+            driver.execute_script("""
+                arguments[0].value += arguments[1];
+                arguments[0].dispatchEvent(new Event('input', { bubbles: true }));
+            """, textarea, char)
 
-    # Enviamos, confirmamos la rúbrica y luego continuamos
-    wait.until(EC.element_to_be_clickable((By.XPATH, '//input[@type="submit"]'))).click()
-    wait.until(EC.element_to_be_clickable((By.XPATH, '//input[@type="submit"]'))).click()
-    wait.until(EC.visibility_of_element_located((By.XPATH, '//button[@type="submit"]'))).click()
+        # Enviamos, confirmamos la rúbrica y luego continuamos
+        wait.until(EC.element_to_be_clickable((By.XPATH, '//input[@type="submit"]'))).click()
+        wait.until(EC.element_to_be_clickable((By.XPATH, '//input[@type="submit"]'))).click()
+        wait.until(EC.visibility_of_element_located((By.XPATH, '//button[@type="submit"]'))).click()
 
-    # Vamos a la pestaña imprimir y digitalizar para guardar la prueba
-    wait.until(EC.element_to_be_clickable((By.XPATH, '//div[@role = "main"]/ul/li[1]'))).click()
-# except:
-    #     logging.error("No se logró importar la rúbrica")
+        # Vamos a la pestaña imprimir y digitalizar para guardar la prueba
+        wait.until(EC.element_to_be_clickable((By.XPATH, '//div[@role = "main"]/ul/li[1]'))).click()
+    except:
+        logging.error("No se logró importar la rúbrica")
 
-# ##################
-# # Atajo
-# driver.get('http://localhost/mod/emarking/print/exam.php?id=4470')
-# ##################
 
 def download_exams():
-    # Atajo
-    driver.get('http://localhost/mod/emarking/view.php?id=4521')
-    # Vamos a la pestaña imprimir y digitalizar para guardar la prueba
+    # ##################
+    # # Atajo
+    # driver.get('http://localhost/mod/emarking/print/exam.php?id=4470')
+    # ##################
+    # # Atajo
+    # driver.get('http://localhost/mod/emarking/view.php?id=4521')
+    # # Vamos a la pestaña imprimir y digitalizar para guardar la prueba
     wait.until(EC.element_to_be_clickable((By.XPATH, '//div[@role = "main"]/ul/li[1]'))).click()
     
     try:
@@ -359,13 +359,13 @@ def correct_button():
         
 login()
 mode_edit()
-# find_emarking_activity()
-# emarking_settings()
+find_emarking_activity()
+emarking_settings()
 rubric()    
-# download_exams()
-# emarkingDesktop_process()
-# process_exams()
-# correct_button()    
+download_exams()
+emarkingDesktop_process()
+process_exams()
+correct_button()    
 
 
 
