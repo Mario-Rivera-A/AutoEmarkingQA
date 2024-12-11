@@ -49,13 +49,16 @@ logging.basicConfig(
 )
 
 #Login
-def login():
+def login(ruta = True):
     try:
-        driver.get(F'{URL}/course/view.php?id={COURSE}')
-        driver.maximize_window()
+        if ruta:
+            driver.get(F'{URL}/course/view.php?id={COURSE}')
+            driver.maximize_window()
         
         # ingresar los datos de usuario
+        driver.find_element(By.ID, "username").clear()
         driver.find_element(By.ID, "username").send_keys(USER)
+        driver.find_element(By.ID, "password").clear()
         driver.find_element(By.ID, "password").send_keys(PASS)
 
         # hacer click en el botón acceder
@@ -120,12 +123,10 @@ def mode_edit():
         
 def find_emarking_activity():
     try:
-        # Buscamos la actividad emarking
-
-        wait = WebDriverWait(driver, 10)
+        # Buscamos la actividad emarking #
 
         # Abrimos el selector de actividades
-        actividades_btn = wait.until(EC.visibility_of_element_located((By.XPATH, '//button[@data-action="open-chooser"]')))
+        actividades_btn = wait.until(EC.visibility_of_element_located((By.XPATH, '//button[@data-action="open-chooser"]/span')))
         time.sleep(1)
         actividades_btn.click() 
 
@@ -140,6 +141,9 @@ SOLO_IMPRESION = 0
 IMPRIMIR_Y_DIGITALIZAR = 1
 CORRECCION_EN_PANTALLA = 2
 REVISION_ENTRE_PARES = 3
+
+def go_to_course():
+    driver.get(F'{URL}/course/view.php?id={COURSE}')
 
 def emarking_settings(type, nombre):
     try:
@@ -171,10 +175,7 @@ def emarking_settings(type, nombre):
         
 
 def rubric():
-    # ####################
-    # # Atajo
-    # driver.get('http://localhost/mod/emarking/view.php?id=4524')
-    # ####################
+
     try:
         # "Importamos" pauta de evaluación
         wait.until(EC.element_to_be_clickable((By.XPATH, '//table/tbody/tr/td[2]'))).click()
@@ -210,13 +211,7 @@ Criterio 3	Nivel 3.1	Nivel 3.2	Nivel 3.3
 
 
 def download_exams():
-    # ##################
-    # # Atajo
-    # driver.get('http://localhost/mod/emarking/print/exam.php?id=4470')
-    # ##################
-    # # Atajo
-    # driver.get('http://localhost/mod/emarking/view.php?id=4521')
-    # Vamos a la pestaña imprimir y digitalizar para guardar la prueba
+
     wait.until(EC.element_to_be_clickable((By.XPATH, '//div[@role = "main"]/ul/li[1]'))).click()
     # Seleccionamos la pestaña "Prueba"
     wait.until(EC.element_to_be_clickable((By.XPATH, '//div[@role = "main"]/ul[2]/li[1]'))).click()
@@ -225,6 +220,7 @@ def download_exams():
     try:
         before_download = set(os.listdir(DIRECTORIO_DESCARGAS))
 
+        global original_window 
         original_window = driver.current_window_handle
         assert len(driver.window_handles) == 1
 
@@ -275,6 +271,7 @@ def emarkingDesktop_process():
     try:
         # Hay que esperar a procesar las pruebas antes de continuar
         logging.info('Procesa el archivo descargado ')
+        print("Procesa la prueba descargada en Emarking Desktop")
         existing_zip_files = [f for f in os.listdir(DIRECTORIO_DESCARGAS) if f.endswith('.zip')]
         zip_file_path = wait_for_zip_file(DIRECTORIO_DESCARGAS, existing_zip_files)
 
@@ -307,49 +304,109 @@ def process_exams():
 
         # Vamos a corrección en pantalla para empezar a revisar las pruebas
         wait.until(EC.element_to_be_clickable((By.XPATH, '//div[@role = "main"]/ul/li[2]'))).click()
+        global emarking_url
+        emarking_url = driver.current_url
+        
     except:
         logging.error("Hubo un error interno al procesar las pruebas, intentar todo de nuevo")
 
 def show_emarking():
     driver.get(F'{URL}/course/view.php?id={COURSE}')
     mode_edit()
-    
-        # Mostramos el emarking
-    # try:
+    # Mostramos el emarking
+    try:
         # Intentamos seleccionar el modal
-    opciones_actividad=wait.until(EC.presence_of_element_located((By.XPATH, '//div[@id="coursecontentcollapse0"]/ul/li[last()]/div/div/div[2]/div/div')))
-    opciones_actividad.click()
-    opciones_actividad.find_element(By.XPATH,'div/div/a[3]').click()
+        opciones_actividad=wait.until(EC.presence_of_element_located((By.XPATH, '//div[@id="coursecontentcollapse0"]/ul/li[last()]/div/div/div[2]/div/div')))
+        opciones_actividad.click()
+        opciones_actividad.find_element(By.XPATH,'div/div/div/a[3]').click()
         
         
-    # except:
-    #     logging.error("Problemas con mostrar el emarking a los alumnos")
+    except:
+        logging.error("Problemas con mostrar el emarking a los alumnos")
     
     
     
-def correct_button(type):
+def correct_button(type, info_estudiantes = [], fast = True):
     
     pruebas_no_corregidas = []
     
     if type == CORRECCION_EN_PANTALLA:
-        try:
-            # Buscamos los elementos tr
-            trs = wait.until(EC.presence_of_all_elements_located((By.XPATH, '//table[@id="emarking-main"]/tbody/tr[not(@class="emptyrow")]')))
-            logging.info(f'Cantidad de pruebas a corregir: {len(trs)}')
-            
-            # Obtener el atributo 'href' de cada elemento 'tr' en la lista 'trs'
-            hrefs_pruebas = [tr.find_element(By.XPATH,'td[5]/div/a[1]').get_attribute('href') for tr in trs]
-            logging.info(f'hrefs: {hrefs_pruebas}')
-            
-            for i, href in enumerate(hrefs_pruebas):
-                try:
-                    driver.get(href)
-                    logging.info(f'Corrigiendo prueba {i+1} de {len(trs)}')
+        
+        # Buscamos los elementos tr
+        trs = wait.until(EC.presence_of_all_elements_located((By.XPATH, '//table[@id="emarking-main"]/tbody/tr[not(@class="emptyrow")]')))
+        logging.info(f'Cantidad de pruebas a corregir: {len(trs)}')
+        
+        # Obtener el atributo 'href' de cada elemento 'tr' en la lista 'trs'
+        hrefs_pruebas = [tr.find_element(By.XPATH,'td[5]/div/a[1]').get_attribute('href') for tr in trs]
+        logging.info(f'hrefs: {hrefs_pruebas}')
+        
+        for i, href in enumerate(hrefs_pruebas):
+            try:
+                if fast and i == 5:
+                    wait.until(EC.presence_of_element_located((By.XPATH, 'div[@class="html-face"]/i[@class="icon-save"]'))).click()
+                    driver.close()
+                    driver.switch_to.window(original_window)
+                    go_to_course()
+                    break
                     
-                    # Ya sabemos la cantidad de criterios y de niveles por criterio que hay en la rúbrica
-                    niveles = {1:random.randint(2,4), 2:random.randint(2,3), 3:random.randint(2,4)}
+                driver.get(href)
+                logging.info(f'Corrigiendo prueba {i+1} de {len(trs)}')
                 
-                    for criterio in range(1,4):
+                # Ya sabemos la cantidad de criterios y de niveles por criterio que hay en la rúbrica
+                niveles = {1:random.randint(2,4), 2:random.randint(2,3), 3:random.randint(2,4)}
+            
+                for criterio in range(1,4):
+                    # Para corregir, podemos hacer un click en la página de la prueba para que se despliegue el modal de corrección 
+                    wait.until(EC.visibility_of_element_located((By.XPATH, '//div/table/tbody/tr[1]/td/div/div/canvas'))).click()
+                    logging.info(f'Corrigiendo criterio {criterio}')
+                    
+                    # Seleccionamos un nivel al azar
+                    wait.until(EC.visibility_of_element_located((By.XPATH, f'//tbody/tr[2]/td/div/div/table/tbody/tr[{criterio}]/td/div/div[{niveles[criterio]}]/div/div'))).click()
+                    
+                    # Guardamos el nivel
+                    wait.until(EC.element_to_be_clickable((By.XPATH, '//tr[4]/td/table/tbody/tr/td[1]/button'))).click()
+                time.sleep(2)
+                if i == len(trs) - 1:
+                    logging.info('Última prueba corregida')
+                
+            except:
+                logging.warning(f'No se pudo corregir la prueba {href}')                
+                time.sleep(4)
+                pruebas_no_corregidas.append(href)
+                continue
+                    
+        
+        
+    elif type == REVISION_ENTRE_PARES:
+        # Mostramos el modal  
+    
+        for i, corrector in enumerate(info_estudiantes):
+            try:
+                if fast and i == 5 :
+                    logging.info("Pruebas entre pares revisadas con éxito")
+                    go_to_course()
+                    break
+                
+                # Iniciamos sesión como el estudiante
+                driver.get(info_estudiantes[i][2])
+                
+                
+                # Pestaña configuración
+                wait.until(EC.presence_of_element_located((By.XPATH, '//div[@class="edw-tabs-navigation"]/ul/li[3]'))).click()
+                student_login= wait.until(EC.presence_of_element_located((By.XPATH, '//section[contains(@class,"administration")]/div/ul/li[2]/span/a'))).get_attribute('href')
+                driver.get(student_login)
+                wait.until(EC.presence_of_element_located((By.XPATH, '//button[@type="submit" and @class="btn btn-primary"]'))).click()
+                
+                # Una vez iniciado sesión, vamos a la prueba y la corregimos
+                driver.get(info_estudiantes[i][4])
+                
+                logging.info(f'Corrigiendo prueba {i+1} de {len(info_estudiantes)}')
+                        
+                # Ya sabemos la cantidad de criterios y de niveles por criterio que hay en la rúbrica
+                niveles = {1:random.randint(2,4), 2:random.randint(2,3), 3:random.randint(2,4)}
+
+                for criterio in range(1,4):
+                    try:
                         # Para corregir, podemos hacer un click en la página de la prueba para que se despliegue el modal de corrección 
                         wait.until(EC.visibility_of_element_located((By.XPATH, '//div/table/tbody/tr[1]/td/div/div/canvas'))).click()
                         logging.info(f'Corrigiendo criterio {criterio}')
@@ -359,45 +416,33 @@ def correct_button(type):
                         
                         # Guardamos el nivel
                         wait.until(EC.element_to_be_clickable((By.XPATH, '//tr[4]/td/table/tbody/tr/td[1]/button'))).click()
-                    time.sleep(2)
-                    if i == len(trs) - 1:
-                        logging.info('Última prueba corregida')
                     
-                except:
-                    logging.warning(f'No se pudo corregir la prueba {href}')                
-                    time.sleep(4)
-                    pruebas_no_corregidas.append(href)
-                    continue
-                    
-        except Exception as e:
-            logging.info(f"No se logró encontrar las pruebas para corregir.\n Error:{e}")
-    elif type == REVISION_ENTRE_PARES:
-        # Mostramos el modal
-        
-        try:
-            # Buscamos a todos los alumnos en la tabla
-            trs = wait.until(EC.presence_of_all_elements_located((By.XPATH, '//table[@id="emarking-main"]/tbody/tr[not(@class="emptyrow")]')))
-            logging.info(f'Cantidad de pruebas a corregir: {len(trs)}')
-            # Obtener el atributo 'href' de cada elemento 'tr' en la lista 'trs'
-            hrefs_alumnos = [tr.find_element(By.XPATH,'td[5]/div/a[1]').get_attribute('href') for tr in trs]
-            logging.info(f'hrefs: {hrefs_alumnos}')
+                    except:
+                        logging.error("Criterio ya seleccionado") 
+                        # time.sleep(4)
+                        driver.get(info_estudiantes[i][4])
+                        continue
+                    if criterio == 3:
+                        logging.info("Criterios corregidos")
+                        driver.get(emarking_url)
+                        
+                
+                # Cerramos sesión
+                wait.until(EC.presence_of_element_located((By.XPATH, '//span[@class="userbutton"]'))).click()
+                session = wait.until(EC.presence_of_element_located((By.XPATH, '//div[@id="user-action-menu"]/div/div/div/a[last()]'))).get_attribute('href')
+                
+                logging.info(f"Se revisó la prueba de {info_estudiantes[i][1]} con éxito")
+                
+                driver.get(session)
+                login(False)
             
-            for i, href in enumerate(hrefs_alumnos):
-                try:
-                    # Vemos el perfil del alumno
-                    driver.get(href)
-                    # Vamos a la configuración del alumno
-                    wait.until(EC.presence_of_element_located((By.XPATH, '//section[@id="region-main"]/div[2]/ul/li[3]'))).click()
-                    # Tenemos que entrar como el alumno
-                    wait.until(EC.presence_of_element_located((By.XPATH, 'div[@class="card-body"]/ul/li[2]'))).click()
-                    # Continuamos
-                    wait.until(EC.element_to_be_clickable((By.XPATH, 'button[@type="submit" and @class="btn btn-primary"]')))
-                    
-            
-                except:
-                    logging.error("No se logró")
-        except:
-            logging.info(f"No se logró revisar la prueba de:")
+            except:
+                logging.error(f"Hubo un problema al revisar la prueba de {info_estudiantes[i][1]}")
+                time.sleep(4)
+                pruebas_no_corregidas.append(info_estudiantes[i][4])
+                continue
+    
+    
     
     
     if len(pruebas_no_corregidas)>1:
@@ -406,8 +451,28 @@ def correct_button(type):
     else:
         logging.info("Proceso de corrección de pruebas finalizado con éxito.")
     
-
+def show_pairs_of_students(fast = True):
     
+    driver.get(emarking_url)
+
+    info_estudiantes = []
+    
+    # Buscamos los elementos tr
+    trs = wait.until(EC.presence_of_all_elements_located((By.XPATH, '//table[@id="emarking-main"]/tbody/tr[not(@class="emptyrow")]')))
+    logging.info(f'Cantidad de pruebas a corregir: {len(trs)}')
+    
+    # Obtenemos el nombre del estudiante a corregir, el href de este usuario, href de la prueba y el estudiante corrector
+    hrefs_estudiantes_correctores = [tr.find_element(By.XPATH, 'td[1]/a[1]').get_attribute('href') for tr in trs]
+    nombre_estudiantes_correctores = [tr.find_element(By.XPATH, 'td[1]/a[2]').text for tr in trs]
+    hrefs_estudiantes_a_corregir = [tr.find_element(By.XPATH, 'td[2]/a[1]').get_attribute('href') for tr in trs]
+    nombre_estudiantes_a_corregir = [tr.find_element(By.XPATH, 'td[2]/a[1]').text.strip() for tr in trs]
+    hrefs_pruebas = [tr.find_element(By.XPATH,'td[6]/div/a[1]').get_attribute('href') for tr in trs]
+    
+    for href_corrector, nombre_corrector, href_a_corregir, nombre_a_corregir, href_prueba in zip(hrefs_estudiantes_correctores, nombre_estudiantes_correctores, hrefs_estudiantes_a_corregir, nombre_estudiantes_a_corregir, hrefs_pruebas):
+        info = [href_corrector, nombre_corrector, href_a_corregir, nombre_a_corregir, href_prueba]
+        info_estudiantes.append(info)
+    
+    correct_button(type=REVISION_ENTRE_PARES, info_estudiantes=info_estudiantes, fast=True)
     
         
 login()
@@ -424,6 +489,7 @@ def normal_emarking():
     correct_button(CORRECCION_EN_PANTALLA)    
     
 def revision_pares():
+    # Hay un pequeño cambio, en revisión entre pares la rúbrica se hace unos pasos después que un emarking normal
     
     mode_edit()
     find_emarking_activity()
@@ -433,12 +499,13 @@ def revision_pares():
     emarkingDesktop_process()
     process_exams()
     rubric()
+    show_emarking() 
+    show_pairs_of_students()
 
 
 
+revision_pares()
 normal_emarking()
-# revision_pares()
-# show_emarking()
 
 
 time.sleep(10)
